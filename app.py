@@ -28,7 +28,7 @@ def faceswap():
         print("Lendo dados do request...")
         source_file = request.files['source']
         target_path = request.form['target_path']
-        target_path = target_path.replace("./frontend", "/home/nelljr/nell_hair_swap_api/backend")
+        target_path = target_path.replace("./frontend", "/home/nelljr/nell_hair_style_swap_api/backend")
         
         print(f"Source file: {type(source_file)}")
         print(f"Target path: {target_path}")
