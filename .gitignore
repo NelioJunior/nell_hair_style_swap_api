@@ -1,3 +1,27 @@
+# Arquivos de modelo grandes
+nell_hair_swap_api/checkpoints/models/
+./checkpoints/
+
+# Diretório de modelos grandes
+checkpoints/
+checkpoints/models/
+checkpoints/models/buffalo_l/
+
+*.onnx
+*.zip
+*.pth
+*.pt
+*.bin
+*.h5
+*.pkl
+*.model
+
+# Outros arquivos grandes comuns
+*.mp4
+*.avi
+*.mov
+*.mkv
+
 # Logs
 logs
 *.log
