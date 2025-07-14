@@ -5,6 +5,8 @@ from PIL import Image
 from datetime import datetime 
 import io
 import os
+import cv2
+import numpy as np
 
 app = Flask(__name__)
 CORS(app)
@@ -12,6 +14,32 @@ CORS(app)
 @app.route("/info", methods=['GET'])
 def root():
     return f"<h1>Nelltek hair style swap API.All Rights Reserved</h1>"
+
+def color_transfer(source, target):
+    # Converte para LAB
+    source = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype(np.float32)
+    target = cv2.cvtColor(target, cv2.COLOR_BGR2LAB).astype(np.float32)
+
+    # Calcula média e desvio padrão para cada canal
+    s_mean, s_std = cv2.meanStdDev(source)
+    t_mean, t_std = cv2.meanStdDev(target)
+
+    # Transforma para 1D
+    s_mean = s_mean.flatten()
+    s_std = s_std.flatten()
+    t_mean = t_mean.flatten()
+    t_std = t_std.flatten()
+
+    # Aplica a transformação canal a canal
+    result = np.zeros_like(target)
+    for i in range(3):  # L, A, B
+        result[:, :, i] = (target[:, :, i] - t_mean[i]) * (s_std[i] / (t_std[i] + 1e-6)) + s_mean[i]
+
+    # Clipa os valores para faixa válida e converte de volta para uint8
+    result = np.clip(result, 0, 255).astype(np.uint8)
+    return cv2.cvtColor(result, cv2.COLOR_LAB2BGR)
+
+
 
 @app.route('/faceswap', methods=['POST'])
 def faceswap():
@@ -52,12 +80,31 @@ def faceswap():
         target_img = Image.open(target_path)
         print(f"Target image size: {target_img.size}")
         
+        
         # Processar face swap
         print("Iniciando processo de face swap...")
         source_img_list = [source_img]  # O inswapper espera uma lista
         result_image = process(source_img_list, target_img, 0, 0, MODEL_PATH)
         print("✅ Face swap concluído!")
-        
+
+        # 🖌️ Aplicar color_transfer para preservar a cor da pele original
+        print("🎨 Aplicando color_transfer...")
+
+        # Converter imagens PIL -> OpenCV
+        result_cv = cv2.cvtColor(np.array(result_image), cv2.COLOR_RGB2BGR)
+        source_cv = cv2.cvtColor(np.array(source_img), cv2.COLOR_RGB2BGR)
+
+        # Redimensionar source para o tamanho do resultado
+        source_cv_resized = cv2.resize(source_cv, (result_cv.shape[1], result_cv.shape[0]))
+
+        # Aplicar transferência de cor
+        harmonizado_cv = color_transfer(source_cv_resized, result_cv)
+
+        # Converter de volta para PIL
+        result_image = Image.fromarray(cv2.cvtColor(harmonizado_cv, cv2.COLOR_BGR2RGB))
+
+        print("🎉 color_transfer aplicado com suceso!")             
+
         # Salvar a imagem resultado na pasta ./data
         print("💾 Salvando imagem resultado...")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
