@@ -15,6 +15,22 @@ CORS(app)
 def root():
     return f"<h1>Nelltek hair style swap API.All Rights Reserved</h1>"
 
+
+def upscale_and_sharpen(face_image, scale=2):
+    h, w = face_image.shape[:2]
+    # Upscale com INTER_LANCZOS4 (melhor qualidade)
+    upscaled = cv2.resize(face_image, (w * scale, h * scale), interpolation=cv2.INTER_LANCZOS4)
+
+    # Sharpen com kernel simples
+    kernel = np.array([[0, -1, 0],
+                       [-1, 5, -1],
+                       [0, -1, 0]])
+    sharpened = cv2.filter2D(upscaled, -1, kernel)
+
+    # Redimensiona de volta pro tamanho original pra não zoar o resultado
+    final = cv2.resize(sharpened, (w, h), interpolation=cv2.INTER_AREA)
+    return final
+
 def color_transfer(source, target):
     # Converte para LAB
     source = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype(np.float32)
@@ -38,8 +54,6 @@ def color_transfer(source, target):
     # Clipa os valores para faixa válida e converte de volta para uint8
     result = np.clip(result, 0, 255).astype(np.uint8)
     return cv2.cvtColor(result, cv2.COLOR_LAB2BGR)
-
-
 
 @app.route('/faceswap', methods=['POST'])
 def faceswap():
@@ -100,6 +114,11 @@ def faceswap():
         # Aplicar transferência de cor
         harmonizado_cv = color_transfer(source_cv_resized, result_cv)
 
+        # 🔥 Upscale + Sharpen após color_transfer
+        print("🔍 Aplicando upscale + sharpen na imagem final...")
+        harmonizado_cv = upscale_and_sharpen(harmonizado_cv)
+        print("✅ Upscale + sharpen concluído!")
+        
         # Converter de volta para PIL
         result_image = Image.fromarray(cv2.cvtColor(harmonizado_cv, cv2.COLOR_BGR2RGB))
 
