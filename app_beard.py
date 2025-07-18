@@ -12,7 +12,7 @@ app.prepare(ctx_id=0, det_size=(640, 640))
 
 # Carregar imagens
 img_source = cv2.imread('./david.png')
-img_target = cv2.imread('./chris.jpg')
+img_target = cv2.imread('./chris.png')
 
 faces_source = app.get(img_source)
 faces_target = app.get(img_target)
