@@ -1,137 +1,67 @@
 import cv2
-import dlib
 import numpy as np
+import onnxruntime as ort
+from insightface.app import FaceAnalysis
 
-def get_landmarks(image, detector, predictor):
-    """Detecta faces e retorna os pontos de referência faciais."""
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    faces = detector(gray)
-    if not faces:
-        return None
-    # Assume a primeira face detectada
-    landmarks = predictor(gray, faces[0])
-    points = []
-    for i in range(0, 68):
-        points.append((landmarks.part(i).x, landmarks.part(i).y))
-    return np.array(points)
+# 1. Carregar modelo e detectar rostos (mesmo do exemplo anterior)
+model_swapper_path = '/home/nelljr/nell_hair_style_swap_api/checkpoints/inswapper_128.onnx'
+swapper = ort.InferenceSession(model_swapper_path, providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
 
-def create_mask(image, landmarks, feature_points):
-    """Cria uma máscara para as características faciais especificadas."""
-    mask = np.zeros(image.shape[:2], dtype=np.uint8)
-    # Exemplo: pontos para o olho esquerdo e direito e nariz
-    # Estes são índices típicos de dlib, você pode precisar ajustar
-    # para a sua implementação exata ou para cobrir a área desejada.
-    all_points = []
-    for feature in feature_points:
-        all_points.extend(feature)
+app = FaceAnalysis(name='buffalo_l')
+app.prepare(ctx_id=0, det_size=(640, 640))
 
-    # Cria um contorno convexo dos pontos para cobrir a área
-    hull = cv2.convexHull(landmarks[all_points])
-    cv2.fillConvexPoly(mask, hull, 255)
+# Carregar imagens
+img_source = cv2.imread('./david.png')
+img_target = cv2.imread('./chris.jpg')
 
-    # Você pode querer suavizar a máscara para um blend mais natural
-    mask = cv2.GaussianBlur(mask, (7, 7), 0) # Ajuste o kernel conforme necessário
+faces_source = app.get(img_source)
+faces_target = app.get(img_target)
+
+# 2. Gerar rosto trocado completo (128x128)
+face_source = faces_source[0]
+face_target = faces_target[0]
+
+# Extrair embedding da fonte
+source_embedding = np.array(face_source.normed_embedding, dtype=np.float32)[None]
+
+# Preparar rosto alvo (normalizado)
+target_face_img = face_target.normed_crop  # Imagem 128x128
+
+# Executar troca completa
+blob = cv2.dnn.blobFromImage(target_face_img, 1.0 / 255.0, (128, 128), (0, 0, 0), swapRB=True)
+result = swapper.run(None, {'source': source_embedding, 'target': blob})[0]
+swapped_face = np.clip(result[0] * 255, 0, 255).astype(np.uint8)
+swapped_face = cv2.cvtColor(swapped_face, cv2.COLOR_RGB2BGR)
+
+# 3. Criar máscaras para olhos e nariz
+def create_region_mask(landmarks, region_indices, img_size=128):
+    mask = np.zeros((img_size, img_size), dtype=np.uint8)
+    points = np.array([landmarks[i] for i in region_indices], dtype=np.int32)
+    cv2.fillPoly(mask, [points], 255)
     return mask
 
-def transfer_features(source_image, target_image, detector, predictor):
-    source_landmarks = get_landmarks(source_image, detector, predictor)
-    target_landmarks = get_landmarks(target_image, detector, predictor)
+# Índices aproximados dos landmarks (ajuste conforme seu modelo)
+LEFT_EYE_INDICES = [33, 34, 35, 36, 37, 38, 39, 40, 41, 42]   # Olho esquerdo
+RIGHT_EYE_INDICES = [87, 88, 89, 90, 91, 92, 93, 94, 95, 96]  # Olho direito
+NOSE_INDICES = [51, 52, 53, 54, 55, 56, 57, 58, 59]           # Nariz
 
-    if source_landmarks is None or target_landmarks is None:
-        print("Não foi possível detectar faces em uma ou ambas as imagens.")
-        return None
+# Criar máscaras combinadas
+landmarks = face_target.landmark.astype(np.int32)
+eyes_nose_mask = create_region_mask(landmarks, LEFT_EYE_INDICES + RIGHT_EYE_INDICES + NOSE_INDICES)
 
-    # Pontos de referência para olhos e nariz (índices dlib típicos)
-    # L-Eye: 36-41
-    # R-Eye: 42-47
-    # Nose: 27-35
-    left_eye_points = list(range(36, 42))
-    right_eye_points = list(range(42, 48))
-    nose_points = list(range(27, 36)) # Ajustei para incluir a ponta do nariz
+# 4. Aplicar apenas olhos e nariz na imagem alvo
+# Redimensionar para o tamanho original do rosto na imagem alvo
+swapped_regions = cv2.bitwise_and(swapped_face, swapped_face, mask=eyes_nose_mask)
+original_face_regions = cv2.bitwise_and(target_face_img, target_face_img, mask=~eyes_nose_mask)
 
-    features_to_swap = [left_eye_points, right_eye_points, nose_points]
+# Combinar regiões
+final_face = cv2.add(original_face_regions, swapped_regions)
 
-    # Crie uma cópia da imagem de destino para modificação
-    output_image = target_image.copy()
+# 5. Colocar de volta na imagem original (simplificado)
+# (Para implementação real, use transformação inversa com os landmarks)
+x, y, w, h = face_target.bbox.astype(int)
+resized_face = cv2.resize(final_face, (w, h))
+img_target[y:y+h, x:x+w] = resized_face
 
-    # Itere sobre as características a serem trocadas
-    for feature_indices in features_to_swap:
-        # Extraia a característica da imagem de origem
-        src_feature_mask = create_mask(source_image, source_landmarks, [feature_indices])
-        src_feature_region = cv2.bitwise_and(source_image, source_image, mask=src_feature_mask)
-
-        # Calcule a transformação para alinhar a característica da origem ao destino
-        # Isso é a parte mais complexa e crucial. Uma abordagem simplificada seria:
-        # 1. Encontrar o centro da característica em ambas as imagens.
-        # 2. Calcular a diferença de escala (se necessário, com base em outros pontos de referência).
-        # 3. Calcular a rotação (se necessário, com base na orientação da característica).
-        # Para um alinhamento mais robusto, você usaria Affine Transformations ou Procrustes Analysis.
-
-        # Para simplificar aqui, vamos tentar um "seamless cloning" com um ponto central.
-        # Isso pode não ser perfeito para cada característica individual sem um alinhamento cuidadoso.
-        
-        # Encontre o centro da característica na imagem de origem e destino
-        src_center = tuple(np.mean(source_landmarks[feature_indices], axis=0).astype(int))
-        target_center = tuple(np.mean(target_landmarks[feature_indices], axis=0).astype(int))
-
-        # Realize o seamless cloning
-        # O seamlessClone funciona melhor quando a máscara e a região de origem estão bem alinhadas.
-        # Para características separadas, o alinhamento precisa ser mais preciso.
-        try:
-            output_image = cv2.seamlessClone(
-                src_feature_region,
-                output_image,
-                src_feature_mask,
-                target_center,
-                cv2.NORMAL_CLONE # Ou cv2.MIXED_CLONE para resultados diferentes
-            )
-        except Exception as e:
-            print(f"Erro ao aplicar seamlessClone para a característica: {e}")
-            print("Verifique se as máscaras e pontos estão corretos.")
-            # Se o seamlessClone falhar, você pode tentar um simples blend ou debug
-
-    return output_image
-
-# --- Configuração do dlib ---
-# Baixe o modelo de preditor de marcos faciais:
-# shape_predictor_68_face_landmarks.dat
-# Você pode encontrar isso aqui: http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2
-# Descompacte e coloque na mesma pasta do seu script ou forneça o caminho completo.
-predictor_path = "shape_predictor_68_face_landmarks.dat"
-detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor(predictor_path)
-
-# --- Exemplo de Uso ---
-if __name__ == "__main__":
-    # Carregue suas imagens
-    source_img_path = "./david.png"
-    target_img_path = "./chris.jpg"
-
-    try:
-        source_image = cv2.imread(source_img_path)
-        target_image = cv2.imread(target_img_path)
-
-        if source_image is None:
-            print(f"Erro: Não foi possível carregar a imagem fonte em {source_img_path}")
-        if target_image is None:
-            print(f"Erro: Não foi possível carregar a imagem destino em {target_img_path}")
-
-        if source_image is not None and target_image is not None:
-            result_image = transfer_features(source_image, target_image, detector, predictor)
-
-            if result_image is not None:
-                cv2.imshow("Original Source", source_image)
-                cv2.imshow("Original Target", target_image)
-                cv2.imshow("Result with Swapped Features", result_image)
-                cv2.waitKey(0)
-                cv2.destroyAllWindows()
-                cv2.imwrite("resultado_olhos_nariz.jpg", result_image)
-            else:
-                print("Não foi possível gerar a imagem resultante.")
-        else:
-            print("Verifique os caminhos das imagens e se elas existem.")
-
-    except FileNotFoundError:
-        print("Erro: Verifique se o arquivo do preditor de marcos faciais existe no caminho especificado.")
-    except Exception as e:
-        print(f"Ocorreu um erro inesperado: {e}")
+# Salvar resultado
+cv2.imwrite('resultado_parcial.jpg', img_target)

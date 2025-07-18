@@ -78,12 +78,7 @@ def faceswap():
         # Verificar se o arquivo target existe
         if not os.path.exists(target_path):
             raise FileNotFoundError(f"Arquivo target não encontrado: {target_path}")
-        
-        # Verificar se é um arquivo de imagem válido
-        valid_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff']
-        if not any(target_path.lower().endswith(ext) for ext in valid_extensions):
-            raise ValueError(f"Arquivo target deve ser uma imagem válida. Extensões suportadas: {valid_extensions}")
-        
+                
         # Converter source file para PIL Image
         print("Convertendo source para PIL Image...")
         source_img = Image.open(source_file.stream)
