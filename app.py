@@ -71,8 +71,7 @@ def faceswap():
         source_file = request.files['source']
         target_path = request.form['target_path']
         target_path = target_path.replace("./frontend", "/home/nelljr/nell_hair_style_swap_api/backend")
-        
-        print(f"Source file: {type(source_file)}")
+
         print(f"Target path: {target_path}")
         
         # Verificar se o arquivo target existe
@@ -83,17 +82,25 @@ def faceswap():
         print("Convertendo source para PIL Image...")
         source_img = Image.open(source_file.stream)
         print(f"Source image size: {source_img.size}")
-        
+
         # Carregar target image do sistema de arquivos
         print(f"Carregando target image de: {target_path}")
         target_img = Image.open(target_path)
         print(f"Target image size: {target_img.size}")
-        
-        
-        # Processar face swap
-        print("Iniciando processo de face swap...")
-        source_img_list = [source_img]  # O inswapper espera uma lista
-        result_image = process(source_img_list, target_img, 0, 0, MODEL_PATH)
+            
+        while True:       
+                  
+            print("Iniciando processo de face swap...")
+            source_img_list = [source_img]  # O inswapper espera uma lista
+            result_image = process(source_img_list, target_img, 0, 0, MODEL_PATH)
+
+            if 'beard' in target_path:
+                target_path = ""
+                source_img , target_img = result_image , source_img
+            else:
+                break 
+
+
         print("✅ Face swap concluído!")
 
         # 🖌️ Aplicar color_transfer para preservar a cor da pele original
@@ -142,6 +149,7 @@ def faceswap():
             download_name='faceswap_result.png'
         )
         print("✅ Resposta enviada!")
+
         return response
             
     except FileNotFoundError as e:
