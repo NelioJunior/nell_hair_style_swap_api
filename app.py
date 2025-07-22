@@ -88,18 +88,9 @@ def faceswap():
         target_img = Image.open(target_path)
         print(f"Target image size: {target_img.size}")
             
-        while True:       
-                  
-            print("Iniciando processo de face swap...")
-            source_img_list = [source_img]  # O inswapper espera uma lista
-            result_image = process(source_img_list, target_img, 0, 0, MODEL_PATH)
-
-            if 'beard' in target_path:
-                target_path = ""
-                source_img , target_img = result_image , source_img
-            else:
-                break 
-
+        print("Iniciando processo de face swap...")
+        source_img_list = [source_img]  # O inswapper espera uma lista
+        result_image = process(source_img_list, target_img, 0, 0, MODEL_PATH)
 
         print("✅ Face swap concluído!")
 
