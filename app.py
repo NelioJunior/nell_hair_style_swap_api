@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from swapper import process
 from PIL import Image
-from datetime import datetime 
+from backgroundremover.bg import remove
 import io
 import os
 import cv2
@@ -30,7 +30,37 @@ def upscale_and_sharpen(face_image, scale=2):
     # Redimensiona de volta pro tamanho original pra não zoar o resultado
     final = cv2.resize(sharpened, (w, h), interpolation=cv2.INTER_AREA)
     return final
+    
+def remove_background_and_fill_color(src_img_path, out_img_path, bg_color):
+    # Remove o fundo (gera imagem com transparência)
+    with open(src_img_path, "rb") as f:
+        data = f.read()
 
+    result = remove(
+        data,
+        model_name="u2netp",
+        alpha_matting=True,
+        alpha_matting_foreground_threshold=240,
+        alpha_matting_background_threshold=10,
+        alpha_matting_erode_structure_size=10,
+        alpha_matting_base_size=1000
+    )
+
+    # Salva imagem temporária com fundo transparente
+    temp_img_path = "temp_no_bg.png"
+    with open(temp_img_path, "wb") as f:
+        f.write(result)
+
+    # Abre imagem com fundo transparente
+    img = Image.open(temp_img_path).convert("RGBA")
+
+    # Cria fundo com a cor desejada e combina
+    bg = Image.new("RGBA", img.size, bg_color + (255,))
+    composited = Image.alpha_composite(bg, img)
+
+    # Converte para RGB e salva sem transparência
+    composited.convert("RGB").save(out_img_path)    
+    
 def color_transfer(source, target):
     # Converte para LAB
     source = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype(np.float32)
@@ -84,60 +114,71 @@ def faceswap():
         print(f"Source image size: {source_img.size}")
 
         # Carregar target image do sistema de arquivos
-        print(f"Carregando target image de: {target_path}")
         target_img = Image.open(target_path)
-        print(f"Target image size: {target_img.size}")
+        
+        if "beard" in target_path:
+           input_path = target_img
+           output_path = 'image_result.png'
+           remove_background_and_fill_color(input_path, output_path, bg_color=(172, 129, 72))  # Cor #AC8148
+
+            # Abrir a imagem resultante e enviar para o frontend
+           result_image = Image.open(output_path)
+           img_buffer = io.BytesIO()
+           result_image.save(img_buffer, format='PNG')
+           img_buffer.seek(0)
+        
+        else:                 
+            print("Iniciando processo de face swap...")
+            source_img_list = [source_img]  # O inswapper espera uma lista
+            result_image = process(source_img_list, target_img, 0, 0, MODEL_PATH)
+
+            print("✅ Face swap concluído!")
+
+            # 🖌️ Aplicar color_transfer para preservar a cor da pele original
+            print("🎨 Aplicando color_transfer...")
+
+            # Converter imagens PIL -> OpenCV
+            result_cv = cv2.cvtColor(np.array(result_image), cv2.COLOR_RGB2BGR)
+            source_cv = cv2.cvtColor(np.array(source_img), cv2.COLOR_RGB2BGR)
+
+            # Redimensionar source para o tamanho do resultado
+            source_cv_resized = cv2.resize(source_cv, (result_cv.shape[1], result_cv.shape[0]))
+
+            # Aplicar transferência de cor
+            harmonizado_cv = color_transfer(source_cv_resized, result_cv)
+
+            # 🔥 Upscale + Sharpen após color_transfer
+            print("🔍 Aplicando upscale + sharpen na imagem final...")
+            harmonizado_cv = upscale_and_sharpen(harmonizado_cv)
+            print("✅ Upscale + sharpen concluído!")
             
-        print("Iniciando processo de face swap...")
-        source_img_list = [source_img]  # O inswapper espera uma lista
-        result_image = process(source_img_list, target_img, 0, 0, MODEL_PATH)
+            # Converter de volta para PIL
+            result_image = Image.fromarray(cv2.cvtColor(harmonizado_cv, cv2.COLOR_BGR2RGB))
 
-        print("✅ Face swap concluído!")
+            print("🎉 color_transfer aplicado com suceso!")             
 
-        # 🖌️ Aplicar color_transfer para preservar a cor da pele original
-        print("🎨 Aplicando color_transfer...")
-
-        # Converter imagens PIL -> OpenCV
-        result_cv = cv2.cvtColor(np.array(result_image), cv2.COLOR_RGB2BGR)
-        source_cv = cv2.cvtColor(np.array(source_img), cv2.COLOR_RGB2BGR)
-
-        # Redimensionar source para o tamanho do resultado
-        source_cv_resized = cv2.resize(source_cv, (result_cv.shape[1], result_cv.shape[0]))
-
-        # Aplicar transferência de cor
-        harmonizado_cv = color_transfer(source_cv_resized, result_cv)
-
-        # 🔥 Upscale + Sharpen após color_transfer
-        print("🔍 Aplicando upscale + sharpen na imagem final...")
-        harmonizado_cv = upscale_and_sharpen(harmonizado_cv)
-        print("✅ Upscale + sharpen concluído!")
-        
-        # Converter de volta para PIL
-        result_image = Image.fromarray(cv2.cvtColor(harmonizado_cv, cv2.COLOR_BGR2RGB))
-
-        print("🎉 color_transfer aplicado com suceso!")             
-
-        # Salvar a imagem resultado na pasta ./data
-        print("💾 Salvando imagem resultado...")
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        result_filename = f"faceswap_result_{timestamp}.png"
-        result_path = os.path.join(DATA_FOLDER, result_filename)
-        result_image.save(result_path)
-        print(f"✅ Imagem salva em: {result_path}")
-        
-        # Retornar como arquivo PNG
-        print("📤 Preparando retorno para o cliente...")
-        img_buffer = io.BytesIO()
-        result_image.save(img_buffer, format='PNG')
-        img_buffer.seek(0)
-        print(f"Buffer size: {len(img_buffer.getvalue())} bytes")
+            # Salvar a imagem resultado na pasta ./data
+            # from datetime import datetime 
+            # print("💾 Salvando imagem resultado...")
+            # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # result_filename = f"image_result_{timestamp}.png"
+            # result_path = os.path.join(DATA_FOLDER, result_filename)
+            # result_image.save(result_path)
+            # print(f"✅ Imagem salva em: {result_path}")
+            
+            # Retornar como arquivo PNG
+            print("📤 Preparando retorno para o cliente...")
+            img_buffer = io.BytesIO()
+            result_image.save(img_buffer, format='PNG')
+            img_buffer.seek(0)
+            print(f"Buffer size: {len(img_buffer.getvalue())} bytes")
         
         print("✅ Enviando resposta...")
         response = send_file(
             img_buffer,
             mimetype='image/png',
             as_attachment=False,
-            download_name='faceswap_result.png'
+            download_name='image_result.png'
         )
         print("✅ Resposta enviada!")
 
