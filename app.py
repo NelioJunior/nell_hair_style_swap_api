@@ -95,7 +95,7 @@ def faceswap():
         if "beard" in target_path:
 
             input_path = source_img
-            output_path = 'image_result.png'
+            output_path = './data/image_result.png'
             bg_color = (172, 129, 72)
 
             remove_background_and_fill_color(input_path, output_path, bg_color)
