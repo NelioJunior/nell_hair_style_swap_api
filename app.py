@@ -27,9 +27,10 @@ def upscale_and_sharpen(face_image, scale=2):
                        [0, -1, 0]])
     sharpened = cv2.filter2D(upscaled, -1, kernel)
 
-    # Redimensiona de volta pro tamanho original pra não zoar o resultado
-    final = cv2.resize(sharpened, (w, h), interpolation=cv2.INTER_AREA)
-    return final
+    # final = cv2.resize(sharpened, (w, h), interpolation=cv2.INTER_AREA)
+    # return final
+    return sharpened
+
     
 def remove_background_and_fill_color(pil_image, out_img_path, bg_color):
     # Converte PIL.Image para bytes
@@ -159,16 +160,6 @@ def faceswap():
             # Converter de volta para PIL
             result_image = Image.fromarray(cv2.cvtColor(harmonizado_cv, cv2.COLOR_BGR2RGB))
 
-            print("🎉 color_transfer aplicado com suceso!")             
-
-            # Salvar a imagem resultado na pasta ./data
-            # from datetime import datetime 
-            # print("💾 Salvando imagem resultado...")
-            # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            # result_filename = f"image_result_{timestamp}.png"
-            # result_path = os.path.join(DATA_FOLDER, result_filename)
-            # result_image.save(result_path)
-            # print(f"✅ Imagem salva em: {result_path}")
             
             # Retornar como arquivo PNG
             print("📤 Preparando retorno para o cliente...")
