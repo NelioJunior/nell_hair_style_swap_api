@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from swapper import process
-from PIL import Image
+from PIL import Image, ImageDraw
 from backgroundremover.bg import remove
 import io
 import os
@@ -31,13 +31,15 @@ def upscale_and_sharpen(face_image, scale=2):
     final = cv2.resize(sharpened, (w, h), interpolation=cv2.INTER_AREA)
     return final
     
-def remove_background_and_fill_color(src_img_path, out_img_path, bg_color):
-    # Remove o fundo (gera imagem com transparência)
-    with open(src_img_path, "rb") as f:
-        data = f.read()
+def remove_background_and_fill_color(pil_image, out_img_path, bg_color):
+    # Converte PIL.Image para bytes
+    img_buffer = io.BytesIO()
+    pil_image.save(img_buffer, format='PNG')
+    img_bytes = img_buffer.getvalue()
 
+    # Remove o fundo com o backgroundremover
     result = remove(
-        data,
+        img_bytes,
         model_name="u2netp",
         alpha_matting=True,
         alpha_matting_foreground_threshold=240,
@@ -46,20 +48,16 @@ def remove_background_and_fill_color(src_img_path, out_img_path, bg_color):
         alpha_matting_base_size=1000
     )
 
-    # Salva imagem temporária com fundo transparente
-    temp_img_path = "temp_no_bg.png"
-    with open(temp_img_path, "wb") as f:
-        f.write(result)
+    # Carrega a imagem resultante (fundo transparente)
+    img_no_bg = Image.open(io.BytesIO(result)).convert("RGBA")
 
-    # Abre imagem com fundo transparente
-    img = Image.open(temp_img_path).convert("RGBA")
+    # Cria novo fundo colorido
+    bg = Image.new("RGBA", img_no_bg.size, bg_color + (255,))
+    composited = Image.alpha_composite(bg, img_no_bg)
 
-    # Cria fundo com a cor desejada e combina
-    bg = Image.new("RGBA", img.size, bg_color + (255,))
-    composited = Image.alpha_composite(bg, img)
+    # Salva resultado final (sem transparência)
+    composited.convert("RGB").save(out_img_path)
 
-    # Converte para RGB e salva sem transparência
-    composited.convert("RGB").save(out_img_path)    
     
 def color_transfer(source, target):
     # Converte para LAB
@@ -89,45 +87,51 @@ def color_transfer(source, target):
 def faceswap():
     try:
 
-        DATA_FOLDER = '/home/nelljr/nell_hair_style_swap_api/data'
-        MODEL_PATH = '/home/nelljr/nell_hair_style_swap_api/checkpoints/inswapper_128.onnx'
-
-        os.makedirs(DATA_FOLDER, exist_ok=True)
-
-        print("🔵 Iniciando processamento faceswap...")
-        
-        # Receber imagem source como arquivo e target_path como string
-        print("Lendo dados do request...")
-        source_file = request.files['source']
         target_path = request.form['target_path']
-        target_path = target_path.replace("./frontend", "/home/nelljr/nell_hair_style_swap_api/backend")
-
-        print(f"Target path: {target_path}")
         
-        # Verificar se o arquivo target existe
-        if not os.path.exists(target_path):
-            raise FileNotFoundError(f"Arquivo target não encontrado: {target_path}")
-                
-        # Converter source file para PIL Image
-        print("Convertendo source para PIL Image...")
+        source_file = request.files['source']
         source_img = Image.open(source_file.stream)
-        print(f"Source image size: {source_img.size}")
-
-        # Carregar target image do sistema de arquivos
-        target_img = Image.open(target_path)
         
         if "beard" in target_path:
-           input_path = target_img
-           output_path = 'image_result.png'
-           remove_background_and_fill_color(input_path, output_path, bg_color=(172, 129, 72))  # Cor #AC8148
 
-            # Abrir a imagem resultante e enviar para o frontend
-           result_image = Image.open(output_path)
-           img_buffer = io.BytesIO()
-           result_image.save(img_buffer, format='PNG')
-           img_buffer.seek(0)
-        
+            input_path = source_img
+            output_path = 'image_result.png'
+            bg_color = (172, 129, 72)
+
+            remove_background_and_fill_color(input_path, output_path, bg_color)
+
+            result_image = Image.open(output_path).convert("RGBA")
+            width, height = result_image.size
+            center_x, center_y = width // 2, height // 2
+            radius = int(min(width, height) * 0.47)  
+
+            mask = Image.new("L", (width, height), 0)
+            draw = ImageDraw.Draw(mask)
+            draw.ellipse(
+                (center_x - radius, center_y - radius, center_x + radius, center_y + radius),
+                fill=255
+            )
+
+            circle_crop = Image.new("RGBA", (width, height), bg_color + (255,))
+            circle_crop.paste(result_image, (0, 0), mask=mask)
+
+            img_buffer = io.BytesIO()
+            circle_crop.convert("RGB").save(img_buffer, format='PNG')
+            img_buffer.seek(0)
+
         else:                 
+
+            DATA_FOLDER = '/home/nelljr/nell_hair_style_swap_api/data'
+            MODEL_PATH = '/home/nelljr/nell_hair_style_swap_api/checkpoints/inswapper_128.onnx'
+
+            os.makedirs(DATA_FOLDER, exist_ok=True)
+
+            target_path = target_path.replace("./frontend", "/home/nelljr/nell_hair_style_swap_api/backend")           
+            target_img = Image.open(target_path)
+
+            if not os.path.exists(target_path):
+                raise FileNotFoundError(f"Arquivo target não encontrado: {target_path}")
+
             print("Iniciando processo de face swap...")
             source_img_list = [source_img]  # O inswapper espera uma lista
             result_image = process(source_img_list, target_img, 0, 0, MODEL_PATH)
