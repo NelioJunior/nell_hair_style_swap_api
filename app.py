@@ -16,7 +16,7 @@ def root():
     return f"<h1>Nelltek hair style swap API.All Rights Reserved</h1>"
 
 
-def upscale_and_sharpen(face_image, scale=2):
+def upscale_and_sharpen(face_image, scale=3):
     h, w = face_image.shape[:2]
     # Upscale com INTER_LANCZOS4 (melhor qualidade)
     upscaled = cv2.resize(face_image, (w * scale, h * scale), interpolation=cv2.INTER_LANCZOS4)
