@@ -150,7 +150,8 @@ def faceswap():
             source_cv_resized = cv2.resize(source_cv, (result_cv.shape[1], result_cv.shape[0]))
 
             # Aplicar transferência de cor
-            harmonizado_cv = color_transfer(source_cv_resized, result_cv)
+            # harmonizado_cv = color_transfer(source_cv_resized, result_cv)
+            harmonizado_cv = source_cv_resized
 
             # 🔥 Upscale + Sharpen após color_transfer
             print("🔍 Aplicando upscale + sharpen na imagem final...")
