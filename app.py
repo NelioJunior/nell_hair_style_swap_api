@@ -146,19 +146,11 @@ def faceswap():
             result_cv = cv2.cvtColor(np.array(result_image), cv2.COLOR_RGB2BGR)
             source_cv = cv2.cvtColor(np.array(source_img), cv2.COLOR_RGB2BGR)
 
-            # Redimensionar source para o tamanho do resultado
-            source_cv_resized = cv2.resize(source_cv, (result_cv.shape[1], result_cv.shape[0]))
+            result_cv_up = upscale_and_sharpen(result_cv)
 
-            # Aplicar transferência de cor
-            # harmonizado_cv = color_transfer(source_cv_resized, result_cv)
-            harmonizado_cv = source_cv_resized
+            source_cv_resized = cv2.resize(source_cv, (result_cv_up.shape[1], result_cv_up.shape[0]))
 
-            # 🔥 Upscale + Sharpen após color_transfer
-            print("🔍 Aplicando upscale + sharpen na imagem final...")
-            harmonizado_cv = upscale_and_sharpen(harmonizado_cv)
-            print("✅ Upscale + sharpen concluído!")
-            
-            # Converter de volta para PIL
+            harmonizado_cv = color_transfer(source_cv_resized, result_cv_up)
             result_image = Image.fromarray(cv2.cvtColor(harmonizado_cv, cv2.COLOR_BGR2RGB))
 
             
