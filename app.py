@@ -85,7 +85,11 @@ def color_transfer(result_image, source_img):
 
     # Clipa os valores para faixa válida e converte de volta para uint8
     result = np.clip(result, 0, 255).astype(np.uint8)
-    return cv2.cvtColor(result, cv2.COLOR_LAB2BGR)
+    result = cv2.cvtColor(result, cv2.COLOR_LAB2BGR)
+    result = Image.fromarray(cv2.cvtColor(result, cv2.COLOR_BGR2RGB)) 
+
+    return result
+
 
 @app.route('/faceswap', methods=['POST'])
 def faceswap():
@@ -141,10 +145,9 @@ def faceswap():
 
             result_image = process(source_img_list, target_img, -1, -1, MODEL_PATH)
             result_image = upscale_and_sharpen(result_image)
-            result_image = color_transfer(result_image, source_img)
-            result_image = Image.fromarray(cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB))  # <-- conversão necessária
+            # result_image = color_transfer(result_image, source_img)
             result_image.save(img_buffer, format='PNG')    
-                    
+
             img_buffer.seek(0)
         
         print("✅ Enviando resposta...")
