@@ -133,18 +133,17 @@ def faceswap():
             if not os.path.exists(target_path):
                 raise FileNotFoundError(f"Arquivo target não encontrado: {target_path}")
 
-            source_img_list = [source_img]  # O inswapper espera uma lista
-            result_image = process(source_img_list, target_img, 0, 0, MODEL_PATH)
+            source_img_list = [source_img]  
+            result_image = process(source_img_list, target_img, -1, -1, MODEL_PATH)
 
-            # Converter imagens PIL -> OpenCV
-            result_cv = cv2.cvtColor(np.array(result_image), cv2.COLOR_RGB2BGR)
-            source_cv = cv2.cvtColor(np.array(source_img), cv2.COLOR_RGB2BGR)
-            result_cv_up = upscale_and_sharpen(result_cv)
-            source_cv_resized = cv2.resize(source_cv, (result_cv_up.shape[1], result_cv_up.shape[0]))
+            # result_cv = cv2.cvtColor(np.array(result_image), cv2.COLOR_RGB2BGR)
+            # source_cv = cv2.cvtColor(np.array(source_img), cv2.COLOR_RGB2BGR)
+
+            # result_cv_up = upscale_and_sharpen(result_cv)
+            # source_cv_resized = cv2.resize(source_cv, (result_cv_up.shape[1], result_cv_up.shape[0]))
             # harmonizado_cv = color_transfer(source_cv_resized, result_cv_up)
-            harmonizado_cv = source_cv_resized
-            
-            result_image = Image.fromarray(cv2.cvtColor(harmonizado_cv, cv2.COLOR_BGR2RGB))
+
+            # result_image = Image.fromarray(cv2.cvtColor(harmonizado_cv, cv2.COLOR_BGR2RGB))
             
             # Retornar como arquivo PNG
             print("📤 Preparando retorno para o cliente...")
