@@ -17,18 +17,16 @@ def root():
 
 
 def upscale_and_sharpen(face_image, scale=3):
+
+    face_image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
     h, w = face_image.shape[:2]
-    # Upscale com INTER_LANCZOS4 (melhor qualidade)
     upscaled = cv2.resize(face_image, (w * scale, h * scale), interpolation=cv2.INTER_LANCZOS4)
 
-    # Sharpen com kernel simples
     kernel = np.array([[0, -1, 0],
                        [-1, 5, -1],
                        [0, -1, 0]])
     sharpened = cv2.filter2D(upscaled, -1, kernel)
 
-    # final = cv2.resize(sharpened, (w, h), interpolation=cv2.INTER_AREA)
-    # return final
     return sharpened
 
     
@@ -134,7 +132,6 @@ def faceswap():
                 raise FileNotFoundError(f"Arquivo target não encontrado: {target_path}")
 
             source_img_list = [source_img]  
-            result_image = process(source_img_list, target_img, -1, -1, MODEL_PATH)
 
             # result_cv = cv2.cvtColor(np.array(result_image), cv2.COLOR_RGB2BGR)
             # source_cv = cv2.cvtColor(np.array(source_img), cv2.COLOR_RGB2BGR)
@@ -146,11 +143,13 @@ def faceswap():
             # result_image = Image.fromarray(cv2.cvtColor(harmonizado_cv, cv2.COLOR_BGR2RGB))
             
             # Retornar como arquivo PNG
-            print("📤 Preparando retorno para o cliente...")
+
+            result_image = process(source_img_list, target_img, -1, -1, MODEL_PATH)
+            result_image = upscale_and_sharpen(result_image)
+            result_image = Image.fromarray(cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB))  # <-- conversão de volta para PIL.Image
             img_buffer = io.BytesIO()
             result_image.save(img_buffer, format='PNG')
             img_buffer.seek(0)
-            print(f"Buffer size: {len(img_buffer.getvalue())} bytes")
         
         print("✅ Enviando resposta...")
         response = send_file(
