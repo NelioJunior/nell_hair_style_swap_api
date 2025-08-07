@@ -26,8 +26,9 @@ def upscale_and_sharpen(face_image, scale=3):
                        [-1, 5, -1],
                        [0, -1, 0]])
     sharpened = cv2.filter2D(upscaled, -1, kernel)
+    result_img = Image.fromarray(cv2.cvtColor(sharpened, cv2.COLOR_BGR2RGB)) 
 
-    return sharpened
+    return result_img
 
     
 def remove_background_and_fill_color(pil_image, out_img_path, bg_color):
@@ -57,15 +58,19 @@ def remove_background_and_fill_color(pil_image, out_img_path, bg_color):
     # Salva resultado final (sem transparência)
     composited.convert("RGB").save(out_img_path)
 
-    
-def color_transfer(source, target):
+def color_transfer(result_image, source_img):
+
+    # Converta PIL.Image para array BGR
+    source = cv2.cvtColor(np.array(source_img), cv2.COLOR_RGB2BGR)
+    target = cv2.cvtColor(np.array(result_image), cv2.COLOR_RGB2BGR)
+
     # Converte para LAB
-    source = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype(np.float32)
-    target = cv2.cvtColor(target, cv2.COLOR_BGR2LAB).astype(np.float32)
+    source_lab = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype(np.float32)
+    target_lab = cv2.cvtColor(target, cv2.COLOR_BGR2LAB).astype(np.float32)
 
     # Calcula média e desvio padrão para cada canal
-    s_mean, s_std = cv2.meanStdDev(source)
-    t_mean, t_std = cv2.meanStdDev(target)
+    s_mean, s_std = cv2.meanStdDev(source_lab)
+    t_mean, t_std = cv2.meanStdDev(target_lab)
 
     # Transforma para 1D
     s_mean = s_mean.flatten()
@@ -74,9 +79,9 @@ def color_transfer(source, target):
     t_std = t_std.flatten()
 
     # Aplica a transformação canal a canal
-    result = np.zeros_like(target)
+    result = np.zeros_like(target_lab)
     for i in range(3):  # L, A, B
-        result[:, :, i] = (target[:, :, i] - t_mean[i]) * (s_std[i] / (t_std[i] + 1e-6)) + s_mean[i]
+        result[:, :, i] = (target_lab[:, :, i] - t_mean[i]) * (s_std[i] / (t_std[i] + 1e-6)) + s_mean[i]
 
     # Clipa os valores para faixa válida e converte de volta para uint8
     result = np.clip(result, 0, 255).astype(np.uint8)
@@ -122,6 +127,7 @@ def faceswap():
 
             DATA_FOLDER = '/home/nelljr/nell_hair_style_swap_api/data'
             MODEL_PATH = '/home/nelljr/nell_hair_style_swap_api/checkpoints/inswapper_128.onnx'
+            img_buffer = io.BytesIO()
 
             os.makedirs(DATA_FOLDER, exist_ok=True)
 
@@ -133,22 +139,12 @@ def faceswap():
 
             source_img_list = [source_img]  
 
-            # result_cv = cv2.cvtColor(np.array(result_image), cv2.COLOR_RGB2BGR)
-            # source_cv = cv2.cvtColor(np.array(source_img), cv2.COLOR_RGB2BGR)
-
-            # result_cv_up = upscale_and_sharpen(result_cv)
-            # source_cv_resized = cv2.resize(source_cv, (result_cv_up.shape[1], result_cv_up.shape[0]))
-            # harmonizado_cv = color_transfer(source_cv_resized, result_cv_up)
-
-            # result_image = Image.fromarray(cv2.cvtColor(harmonizado_cv, cv2.COLOR_BGR2RGB))
-            
-            # Retornar como arquivo PNG
-
             result_image = process(source_img_list, target_img, -1, -1, MODEL_PATH)
             result_image = upscale_and_sharpen(result_image)
-            result_image = Image.fromarray(cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB))  # <-- conversão de volta para PIL.Image
-            img_buffer = io.BytesIO()
-            result_image.save(img_buffer, format='PNG')
+            result_image = color_transfer(result_image, source_img)
+            result_image = Image.fromarray(cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB))  # <-- conversão necessária
+            result_image.save(img_buffer, format='PNG')    
+                    
             img_buffer.seek(0)
         
         print("✅ Enviando resposta...")
