@@ -16,7 +16,7 @@ def root():
     return f"<h1>Nelltek hair style swap API.All Rights Reserved</h1>"
 
 
-def upscale_and_sharpen(face_image, scale=3):
+def upscale_and_sharpen(face_image, scale=2):
 
     face_image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
     h, w = face_image.shape[:2]
@@ -99,6 +99,11 @@ def faceswap():
         
         source_file = request.files['source']
         source_img = Image.open(source_file.stream)
+
+        MAX_SIZE = 1024
+        if max(source_img.size) > MAX_SIZE:
+            source_img.thumbnail((MAX_SIZE, MAX_SIZE), Image.ANTIALIAS)
+            print("Imagem maior que 1024"  )
         
         if "beard" in target_path:
 
@@ -145,7 +150,7 @@ def faceswap():
 
             result_image = process(source_img_list, target_img, -1, -1, MODEL_PATH)
             result_image = upscale_and_sharpen(result_image)
-            # result_image = color_transfer(result_image, source_img)
+            result_image = color_transfer(result_image, source_img)
             result_image.save(img_buffer, format='PNG')    
 
             img_buffer.seek(0)
