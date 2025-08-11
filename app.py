@@ -99,11 +99,6 @@ def faceswap():
         
         source_file = request.files['source']
         source_img = Image.open(source_file.stream)
-
-        MAX_SIZE = 1024
-        if max(source_img.size) > MAX_SIZE:
-            source_img.thumbnail((MAX_SIZE, MAX_SIZE), Image.ANTIALIAS)
-            print("Imagem maior que 1024"  )
         
         if "beard" in target_path:
 
